@@ -1,0 +1,47 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      # Works whether the repo holds the project files directly,
+      # or just the single file WeatherWall.zip (unzipped here).
+      - name: Locate project
+        run: |
+          if [ -f WeatherWall.zip ]; then
+            unzip -oq WeatherWall.zip
+            DIR=WeatherWall
+          else
+            DIR=.
+          fi
+          echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "Using project folder: $DIR"
+          find "$DIR" -not -path '*/.git/*' -not -path '*/.git' | sort | head -60
+          if [ ! -f "$DIR/app/build.gradle.kts" ]; then
+            echo "::error::app/build.gradle.kts is missing from the repo - the app folder did not upload."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-34 build-tools;34.0.0"
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: 8.7
+
+      - name: Build
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WeatherWall-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
